@@ -2,7 +2,6 @@
 using OpenQA.Selenium.Chrome;
 using OpenQA.Selenium.Interactions;
 using OpenQA.Selenium.Support.UI;
-using SeleniumProxyAuth.Models;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -11,7 +10,10 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using SeleniumProxyAuth;
+using System.Reflection;
+using GiaLap.Modal;
+using OpenQA.Selenium.Firefox;
+using SeleniumUndetectedChromeDriver;
 
 namespace GiaLap.Controller
 {
@@ -44,93 +46,82 @@ namespace GiaLap.Controller
                 return tempDirectory;
             }
         }
-        public string BackgroundJs(string host, string port, string username, string password)
+        public static IWebDriver LoadProfileChrome(IWebDriver driver,string ID)
         {
-            string data = File.ReadAllText("test.txt");
-
-            string tempDirectory = GetTemporaryDirectory();
-            string BackgroundJs = data.Replace("%host", host).Replace("%port", port).Replace("%username", username).Replace("%password", password);
-            File.WriteAllText(tempDirectory+"test.txt", BackgroundJs);
-            return BackgroundJs;
+            var outPutDirectory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+            var ProfileFolderPath = Path.GetFullPath(Path.Combine(outPutDirectory, @"..\..\bin\Debug\Profile"));
+            if (driver != null)
+            {
+                try
+                {
+                    driver.Close();
+                    driver.Quit();
+                }
+                catch (Exception ex)
+                {
+                }
+            }
+            ChromeOptions options = new ChromeOptions();
+            if (!Directory.Exists(ProfileFolderPath))
+            {
+                Directory.CreateDirectory(ProfileFolderPath);
+            }
+            if (Directory.Exists(ProfileFolderPath))
+            {
+                options.AddArguments("user-data-dir=" + ProfileFolderPath + "\\" + ID);
+            }
+            driver = new ChromeDriver(options);
+            return driver;
         }
-        //public static string BackgroundJs(string host, string port, string username, string password)
-        //{
-        //    string data = @"
-        //    var config = {            
-        //        mode: 'fixed_servers',
-        //        rules:
-        //        {
-        //        singleProxy:
-        //            {
-        //            scheme: 'http',
-        //            host: '%host',
-        //            port: %port
-        //        },
-        //        bypassList:['localhost']
-        //        }
-        //    };
-        //    chrome.proxy.settings.set({value: config, scope: 'regular'}, function() { });
-        //    function callbackFn(details)
-        //    {
-        //        return {
-        //        authCredentials:{
-        //                username: '%username',
-        //                password: '%password'
-        //            }
-        //        };
-        //    }
-        //    chrome.webRequest.onAuthRequired.addListener(
-        //                callbackFn,
-        //                {urls: ['<all_urls>']
-        //    }, ['blocking']);
-        //    ";
-        //    string BackgroundJs = data.Replace("%host", host).Replace("%port", port).Replace("%username", username).Replace("%password", password);
-        //    return BackgroundJs;
-        //}
-        //public static void CreateJsFile(string fileName, string content)
-        //{
-        //    // Tạo một đối tượng `FileStream` để ghi vào file.
-        //    FileStream fs = new FileStream(fileName, FileMode.Create);
-
-        //    // Ghi nội dung vào file.
-        //    fs.Write(Encoding.Default.GetBytes(content), 0, content.Length);
-
-        //    // Đóng file.
-        //    fs.Close();
-        //}
-        public void Test()
+        public static IWebDriver ChromeWebdriver(ProxyAuthent proxyAuth)
         {
-            // Create a local proxy server
-            var proxyServer = new SeleniumProxyServer();
+            string ip = proxyAuth.ip + proxyAuth.port.ToString();
 
-            // Don't await, have multiple drivers at once using the local proxy server
-            TestSeleniumProxyServer(proxyServer, new ProxyAuth("123.123.123.123", 80, "prox-username1", "proxy-password1"));
-            TestSeleniumProxyServer(proxyServer, new ProxyAuth("11.22.33.44", 80, "prox-username2", "proxy-password2"));
-            TestSeleniumProxyServer(proxyServer, new ProxyAuth("111.222.222.111", 80, "prox-username3", "proxy-password3"));
-
-            while (true) { }
-        }
-        public static IWebDriver ChromeWebdriver()
-        {
+            var outPutDirectory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+            
+            var ExtentionFolderPath = Path.GetFullPath(Path.Combine(outPutDirectory, @"..\..\bin\Debug\Extention"));
+            
+            var chromeDriverPath = Path.GetFullPath(Path.Combine(outPutDirectory, @"..\..\bin\Debug\chromedriver_win32\1.exe"));
             ChromeOptions options = new ChromeOptions();
             options.AddArgument("--no-sandbox");
             options.AddArgument("--disable-gpu");
             options.AddArgument("--disable-notifications");
             options.AddArgument("--disable-infobars");
-            options.AddArgument("--disable-extensions");
-            options.AddArgument("--mute-audio");
-            options.AddArgument(
-                "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36 Edg/92.0.902.62");
+            if (!string.IsNullOrEmpty(ip))
+            {
+                if (!string.IsNullOrEmpty(proxyAuth.username) && !string.IsNullOrEmpty(proxyAuth.pass))
+                {
+                    options.AddExtension(ExtentionFolderPath + "\\Proxy-Auto-Auth.crx");
+                }
+                options.AddArgument(string.Format("--proxy-server={0}", ip));
+            }
+            var driver = UndetectedChromeDriver.Create(options,
+            driverExecutablePath: chromeDriverPath,
+            // hide selenium command prompt window  
+            hideCommandPromptWindow: true);
 
+            //var service = ChromeDriverService.CreateDefaultService(chromeDriverPath);
+            //service.HideCommandPromptWindow = true;
+            //var driver = new ChromeDriver(service,options);
 
-            var service = ChromeDriverService.CreateDefaultService();
-            service.HideCommandPromptWindow = true;
+            if (!string.IsNullOrEmpty(ip))
+            {
+                if (!string.IsNullOrEmpty(proxyAuth.username) && !string.IsNullOrEmpty(proxyAuth.pass))
+                {
+                    driver.Url = "chrome-extension://ggmdpepbjljkkkdaklfihhngmmgmpggp/options.html";
+                    driver.Navigate();
 
-            options.AddArgument("ignore-certificate-errors");
-            IWebDriver driver = new ChromeDriver(service,options);
+                    driver.FindElement(By.Id("login")).SendKeys(proxyAuth.username);
+                    driver.FindElement(By.Id("password")).SendKeys(proxyAuth.pass);
+                    driver.FindElement(By.Id("retry")).Clear();
+                    driver.FindElement(By.Id("retry")).SendKeys("2");
+
+                    driver.FindElement(By.Id("save")).Click();
+                }
+            }
             return driver;
         }
-
+        
         public static void Hover(IWebDriver driver, IWebElement element)
         {
             Actions action = new Actions(driver);
